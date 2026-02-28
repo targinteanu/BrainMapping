@@ -1,0 +1,5 @@
+*.mat
+/freesurfer
+fsaverage
+*.nii
+*.xlsx
