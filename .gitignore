@@ -4,3 +4,4 @@ fsaverage
 *.nii
 *.xlsx
 .DS_Store
+*.asv
