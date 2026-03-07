@@ -4,13 +4,18 @@
 
 ft_defaults
 
+%fshome     = '/Applications/freesurfer/7.4.1';
+fshome     = '/Applications/freesurfer/8.1.0'; 
+
 if ~exist('subjID', 'var')
     [filename, filepath] = uigetfile('*_CT.nii');
     subjID = filename(1:(end-7));
     clear filename filepath
 end
 
-%%
+%% show brain 3D obj without electrodes
+% output from freesurfer processing MRI
+
 figure; 
 
 pial_lh = ft_read_headshape('freesurfer/surf/lh.pial.T1');
@@ -25,7 +30,7 @@ ft_plot_mesh(pial_rh);
 lighting gouraud;
 camlight;
 
-%%
+%% load MRI files
 
 mri_acpc = ft_read_mri([subjID '_MR_acpc.nii']);
 fsmri_acpc = ft_read_mri('freesurfer/mri/T1.mgz');
@@ -42,11 +47,11 @@ cfg.method    = 'interactive';
 cfg.coordsys  = 'ctf';
 ct_ctf = ft_volumerealign(cfg, ct);
 
-%%
+%% convert CT to MRI space
 ft_hastoolbox('spm12', 1);
 ct_acpc = ft_convert_coordsys(ct_ctf, 'acpc',0);
 
-%%
+%% align CT with MRI
 cfg             = [];
 cfg.method      = 'spm';
 cfg.spmversion  = 'spm12';
@@ -54,7 +59,7 @@ cfg.coordsys    = 'acpc';
 cfg.viewresult  = 'yes';
 ct_acpc_f = ft_volumerealign(cfg, ct_acpc, fsmri_acpc);
 
-%%
+%% save
 
 cfg           = [];
 cfg.filename  = [subjID '_CT_acpc_f'];
@@ -62,51 +67,56 @@ cfg.filetype  = 'nifti';
 cfg.parameter = 'anatomy';
 ft_volumewrite(cfg, ct_acpc_f);
 
-%%
+%% identify electrodes from CT (manually)
 
 % ct_acpc_f = ft_read_mri([subjID '_CT_acpc_f.nii']);
 
 cfg = [];
 elec_acpc_f = ft_electrodeplacement(cfg, ct_acpc_f, fsmri_acpc);
 
-%%
+%% save
 save([subjID '_elec_acpc_f.mat'], 'elec_acpc_f');
 
-%%
+%% view result of electrode placement
+% against orthogonal 2D slices of MRI
 
 figure;
 
 ft_plot_ortho(fsmri_acpc.anatomy, 'transform', fsmri_acpc.transform, 'style', 'intersect');
 ft_plot_sens(elec_acpc_f, 'label', 'on', 'fontcolor', 'w');
 
-%%
+%% load cortex hulls 
+% for each hemisphere
 
 cfg           = [];
 cfg.method    = 'cortexhull';
 cfg.headshape = 'freesurfer/surf/lh.pial';
-cfg.fshome    = '/Applications/freesurfer/7.4.1';
+cfg.fshome    = fshome;
 hull_lh = ft_prepare_mesh(cfg);
 
 cfg           = [];
 cfg.method    = 'cortexhull';
 cfg.headshape = 'freesurfer/surf/rh.pial';
-cfg.fshome    = '/Applications/freesurfer/7.4.1';
+cfg.fshome    = fshome;
 hull_rh = ft_prepare_mesh(cfg);
 
-%%
+%% save
 save([subjID, '_hull_lh.mat'], 'hull_lh');
 save([subjID, '_hull_rh.mat'], 'hull_rh');
 
-%%
+%% match electrodes to cortex 
+% move each to nearest point on cortex
 
-hullside = questdlg('On which side (hemisphere) are the cortical electrodes?', ...
-    'Cortex Electrode Laterality', 'Left', 'Right', 'Left');
-if strcmp(hullside, 'Left')
+lat = input('On which side (hemisphere) are the cortical electrodes (L/R)? ', "s");
+lat = lower(lat);
+if contains(lat, 'left') | strcmp(lat, 'l') | strcmp(lat, 'lh')
     hullside = hull_lh;
-elseif strcmp(hullside, 'Right')
+    lat = 'l';
+elseif contains(lat, 'right') | strcmp(lat, 'r') | strcmp(lat, 'rh')
     hullside = hull_rh;
+    lat = 'r';
 else
-    error('Selection must be made.')
+    error('Selection (L/R) must be made.')
 end
 
 elec_acpc_fr = elec_acpc_f;
@@ -120,10 +130,10 @@ cfg.warp        = 'dykstra2012';
 cfg.feedback    = 'yes';
 elec_acpc_fr = ft_electroderealign(cfg);
 
-%%
+%% save
 save([subjID '_elec_acpc_fr.mat'], 'elec_acpc_fr');
 
-%%
+%% show electrodes on 3D brain obj
 figure;
 % figure(2)
 ft_plot_mesh(pial_lh);
@@ -139,7 +149,7 @@ material dull;
 lighting gouraud;
 camlight;
 
-%%
+%% convert to MNI space 
 
 cfg            = [];
 cfg.elec       = elec_acpc_fr;
@@ -150,17 +160,43 @@ cfg.spmmethod  = 'new';
 cfg.nonlinear  = 'yes';
 elec_mni_frv = ft_electroderealign(cfg);
 
-%%
+%% warp to fsavg brain
+% If this section fails to run, examine the warning that shows up before
+% the error for missing files. FreeSurfer creates shortcuts/aliases that
+% may be lost when transferring files. This error can sometimes be fixed
+% as follows. In the subject's folder freesurfer/surf, duplicate the file
+% "*h.sphere.reg" as "*h.pial.sphere.reg" [substituting "*" for "l" and/or 
+% "r"]. If it still doesn't work, in the folder at fshome (i.e. in
+% /Applications/freesurfer/[version]), in the folder
+% subjects/fsaverage/surf, do the same, and also duplicate "*h.pial" as
+% "*h.pial.pial". 
 
 cfg           = [];
 cfg.elec      = elec_acpc_fr;
 cfg.method    = 'headshape';
-cfg.headshape = 'freesurfer/surf/rh.pial';
+cfg.headshape = ['freesurfer/surf/',lat,'h.pial.T1'];
 cfg.warp      = 'fsaverage';
-cfg.fshome    = '/Applications/freesurfer/7.4.1';
+cfg.fshome    = fshome;
 elec_fsavg_frs = ft_electroderealign(cfg);
 
-%%
+%% show warped electrodes on 3D fsavg brain
+figure; 
+pial_lh_avg = ft_read_headshape(fullfile(fshome,'subjects','fsaverage','surf','lh.pial'));
+pial_rh_avg = ft_read_headshape(fullfile(fshome,'subjects','fsaverage','surf','rh.pial'));
+ft_plot_mesh(pial_lh_avg);
+ft_plot_mesh(pial_rh_avg);
+el=ft_plot_sens(elec_fsavg_frs);
+%el.CData = colordata;
+el.SizeData = 100;
+el.Marker = "o";
+el.MarkerFaceColor = 'flat';
+el.MarkerEdgeColor = 'k';
+% view([66.1890, 39.71]);
+material dull;
+lighting gouraud;
+camlight;
+
+%% show the electrodes in MNI space on a 3D template brain
 figure;
 [ftver, ftpath] = ft_version;
 load([ftpath filesep 'template/anatomy/surface_pial_left.mat']);
@@ -181,7 +217,7 @@ material dull;
 lighting gouraud;
 camlight;
 
-%%
+%% save space-transformed electrode coordinates
 
 save([subjID '_elec_mni_frv.mat'], 'elec_mni_frv');
 save([subjID '_elec_fsavg_frs.mat'], 'elec_fsavg_frs');
