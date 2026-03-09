@@ -131,10 +131,10 @@ cfg.spmmethod  = 'new';
 cfg.nonlinear  = 'yes';
 elec_mni_frv = ft_electroderealign(cfg);
 
-%% choose laterality
-% TO DO: adjust this and the following section to handle when there are
-% electrodes on both sides!
+%% handle left/right side 
 
+%{
+% User chooses laterality 
 lat = input('On which side (hemisphere) are the electrodes (L/R)? ', "s");
 lat = lower(lat);
 if contains(lat, 'left') | strcmp(lat, 'l') | strcmp(lat, 'lh')
@@ -146,6 +146,29 @@ elseif contains(lat, 'right') | strcmp(lat, 'r') | strcmp(lat, 'rh')
 else
     error('Selection (L/R) must be made.')
 end
+%} 
+
+% laterality assigned automatically 
+% assume there may be electrodes on both sides 
+if isfield(elec_acpc_f, 'chanpos')
+    XYZ = elec_acpc_f.chanpos;
+else
+    XYZ = elec_acpc_f.elecpos;
+end
+% assume elec_acpc_f is in RAS orientation 
+elec_rh = XYZ(:,1) >= 0; elec_lh = ~elec_rh;
+% split into L/R 
+elec_acpc_f_rh = elec_acpc_f; elec_acpc_f_lh = elec_acpc_f;
+FieldsToSplit = ["chanpos", "chantype", "chanunit", "elecpos", "label"];
+for F = FieldsToSplit
+    if isfield(elec_acpc_f, F)
+        Fval = elec_acpc_f.(F);
+        elec_acpc_f_rh.(F) = Fval(elec_rh,:);
+        elec_acpc_f_lh.(F) = Fval(elec_lh,:);
+    end
+end
+elec_acpc_f_rh.cfg.channel = elec_acpc_f.cfg.channel(elec_rh,:);
+elec_acpc_f_lh.cfg.channel = elec_acpc_f.cfg.channel(elec_lh,:);
 
 %% warp to fsavg brain
 % If this section fails to run, examine the warning that shows up before
@@ -158,13 +181,41 @@ end
 % subjects/fsaverage/surf, do the same, and also duplicate "*h.pial" as
 % "*h.pial.pial". 
 
+if sum(elec_rh)
 cfg           = [];
-cfg.elec      = elec_acpc_f;
+cfg.elec      = elec_acpc_f_rh;
 cfg.method    = 'headshape';
-cfg.headshape = ['freesurfer/surf/',lat,'h.pial.T1'];
+cfg.headshape = 'freesurfer/surf/rh.pial.T1';
 cfg.warp      = 'fsaverage';
 cfg.fshome    = fshome;
-elec_fsavg_frs = ft_electroderealign(cfg);
+elec_fsavg_frs_rh = ft_electroderealign(cfg);
+else
+    elec_fsavg_frs_rh = [];
+end
+
+if sum(elec_lh)
+cfg           = [];
+cfg.elec      = elec_acpc_f_lh;
+cfg.method    = 'headshape';
+cfg.headshape = 'freesurfer/surf/lh.pial.T1';
+cfg.warp      = 'fsaverage';
+cfg.fshome    = fshome;
+elec_fsavg_frs_lh = ft_electroderealign(cfg);
+else
+    elec_fsavg_frs_lh = [];
+end
+
+% recombine L/R
+elec_tmp = [elec_fsavg_frs_rh; elec_fsavg_frs_lh];
+if numel(elec_tmp) > 1
+    elec_fsavg_frs = elec_fsavg_frs_rh; % non-split fields will remain unchanged
+    for F = FieldsToSplit
+        elec_fsavg_frs.(F) = [elec_fsavg_frs_rh.(F); elec_fsavg_frs_lh.(F)];
+    end
+    elec_fsavg_frs.cfg.channel = [elec_fsavg_frs_rh.cfg.channel; elec_fsavg_frs_lh.cfg.channel];
+else
+    elec_fsavg_frs = elec_tmp;
+end
 
 %% show warped electrodes on 3D fsavg brain
 figure; 
