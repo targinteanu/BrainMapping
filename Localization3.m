@@ -107,7 +107,7 @@ save([subjID, '_hull_rh.mat'], 'hull_rh');
 %% match electrodes to cortex 
 % move each to nearest point on cortex
 
-lat = input('On which side (hemisphere) are the cortical electrodes (L/R)? ', "s");
+lat = input('On which side (hemisphere) are the cortical electrodes (L/R)? ', 's');
 lat = lower(lat);
 if contains(lat, 'left') | strcmp(lat, 'l') | strcmp(lat, 'lh')
     hullside = hull_lh;
