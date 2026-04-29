@@ -5,7 +5,7 @@
 ft_defaults
 
 %fshome     = '/Applications/freesurfer/7.4.1';
-fshome     = '/Applications/freesurfer/8.1.0'; 
+fshome     = '/Applications/freesurfer/8.2.0'; 
 
 if ~exist('subjID', 'var')
     [filename, filepath] = uigetfile('*_CT.nii');
@@ -69,7 +69,7 @@ ft_volumewrite(cfg, ct_acpc_f);
 
 %% identify electrodes from CT (manually)
 
-% ct_acpc_f = ft_read_mri([subjID '_CT_acpc_f.nii']);
+ct_acpc_f = ft_read_mri([subjID '_CT_acpc_f.nii']);
 
 cfg = [];
 elec_acpc_f = ft_electrodeplacement(cfg, ct_acpc_f, fsmri_acpc);
@@ -167,8 +167,26 @@ for F = FieldsToSplit
         elec_acpc_f_lh.(F) = Fval(elec_lh,:);
     end
 end
-elec_acpc_f_rh.cfg.channel = elec_acpc_f.cfg.channel(elec_rh,:);
-elec_acpc_f_lh.cfg.channel = elec_acpc_f.cfg.channel(elec_lh,:);
+try
+    elec_acpc_f_rh.cfg.channel = elec_acpc_f.cfg.channel(elec_rh,:);
+catch ME
+    warning(ME.message);
+end
+try
+    elec_acpc_f_lh.cfg.channel = elec_acpc_f.cfg.channel(elec_lh,:);
+catch ME 
+    warning(ME.message);
+end
+try 
+    elec_acpc_f_rh.tra = elec_acpc_f_rh.tra(elec_rh, elec_rh);
+catch ME 
+    warning(ME.message);
+end
+try 
+    elec_acpc_f_lh.tra = elec_acpc_f_lh.tra(elec_lh, elec_lh);
+catch ME 
+    warning(ME.message);
+end
 
 %% warp to fsavg brain
 % If this section fails to run, examine the warning that shows up before
